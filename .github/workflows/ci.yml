@@ -1,0 +1,96 @@
+name: ShopAI CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ── Job 1 : Tests back-end (FIABLE — les tests mockent la BDD) ────────────
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        working-directory: ./backend
+        run: npm ci || npm install
+      - name: Typecheck
+        working-directory: ./backend
+        run: npx tsc --noEmit
+      - name: Tests (Jest + coverage)
+        working-directory: ./backend
+        run: npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: testsecret
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage/
+          if-no-files-found: ignore
+
+  # ── Job 2 : Build front-end (FIABLE) ──────────────────────────────────────
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        working-directory: ./frontend
+        run: npm ci || npm install
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+
+  # ── Job 3 : Sécurité (FIABLE — audit non bloquant) ────────────────────────
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend audit
+        working-directory: ./backend
+        run: npm audit --audit-level=high || true
+      - name: Frontend audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=high || true
+      - name: Aucun .env commité
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::Un fichier .env a été commité"; exit 1
+          fi
+
+  # ── Job 4 : Build des images Docker (NON BLOQUANT) ────────────────────────
+  # bcrypt est un module natif : si sa compilation échoue en CI, on ne casse
+  # pas tout le pipeline. Le job reste visible mais informatif.
+  docker-build:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image backend
+        run: docker build -t shopai-backend:ci ./backend
+      - name: Build image frontend
+        run: docker build -t shopai-frontend:ci ./frontend
+
+  # ── Job 5 : Déploiement (dépend UNIQUEMENT des jobs fiables) ──────────────
+  deploy:
+    needs: [backend-tests, frontend-build, security]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Déploiement (placeholder)
+        run: echo "Déploiement de ShopAI en production…"

@@ -1,0 +1,216 @@
+{
+  "info": {
+    "name": "ShopAI API",
+    "description": "Collection complète de l'API ShopAI (E-commerce Master 1 CDA). Base: /api/v1.\n\nFlux rapide : 1) Auth > Captcha, 2) copiez la réponse dans le body de Login, 3) Login stocke le token automatiquement.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "token", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "captchaId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Get Captcha",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "const d = pm.response.json();",
+                "pm.collectionVariables.set('captchaId', d.captchaId);",
+                "console.log('Captcha:', d.question);"
+              ] }
+            }
+          ],
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/captcha" }
+        },
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "if (pm.response.code === 201) { pm.collectionVariables.set('token', pm.response.json().accessToken); }"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"new@shopai.ma\",\n  \"password\": \"Client123!\",\n  \"firstName\": \"Nouveau\",\n  \"lastName\": \"Client\"\n}" }
+          }
+        },
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "if (pm.response.code === 200) { pm.collectionVariables.set('token', pm.response.json().accessToken); }"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Récupérez d'abord le captcha (Get Captcha), puis remplacez captchaAnswer par le résultat.",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@shopai.ma\",\n  \"password\": \"Admin123!\",\n  \"captchaId\": \"{{captchaId}}\",\n  \"captchaAnswer\": 0\n}" }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List products",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "const d = pm.response.json(); const rows = d.rows || d; if (rows[0]) pm.collectionVariables.set('productId', rows[0].id);"
+            ] } }
+          ],
+          "request": { "method": "GET", "url": "{{baseUrl}}/products?page=1&limit=12" }
+        },
+        { "name": "Get product", "request": { "method": "GET", "url": "{{baseUrl}}/products/{{productId}}" } },
+        {
+          "name": "Create product (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/products",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Produit Test\",\n  \"slug\": \"produit-test\",\n  \"description\": \"Description\",\n  \"price\": 49.99,\n  \"stock\": 100,\n  \"imageUrl\": \"https://picsum.photos/400\"\n}" }
+          }
+        },
+        {
+          "name": "Update product (admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"price\": 39.99,\n  \"stock\": 80\n}" }
+          }
+        },
+        {
+          "name": "Delete product (admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/products/{{productId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        { "name": "List categories", "request": { "method": "GET", "url": "{{baseUrl}}/categories" } }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/ai/recommendations/{{productId}}"
+          }
+        },
+        {
+          "name": "Generate product sheet (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/ai/generate-product",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Casque Gaming Pro\",\n  \"keywords\": \"sans-fil, RGB, micro antibruit\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Checkout (create order)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "if (pm.response.code === 201) pm.collectionVariables.set('orderId', pm.response.json().id);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/orders/checkout",
+            "body": { "mode": "raw", "raw": "{\n  \"items\": [{ \"productId\": \"{{productId}}\", \"quantity\": 1 }],\n  \"shippingAddress\": {\n    \"street\": \"12 Bd Mohammed V\",\n    \"city\": \"Casablanca\",\n    \"postalCode\": \"20000\",\n    \"country\": \"Maroc\"\n  }\n}" }
+          }
+        },
+        {
+          "name": "My orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/orders/me"
+          }
+        },
+        {
+          "name": "Order detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "All orders (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/orders"
+          }
+        },
+        {
+          "name": "Update order status (admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/orders/{{orderId}}/status",
+            "body": { "mode": "raw", "raw": "{ \"status\": \"shipped\" }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        { "name": "Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/admin/dashboard" } },
+        { "name": "Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/admin/users" } },
+        {
+          "name": "Toggle user status",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/users/:id/status",
+            "body": { "mode": "raw", "raw": "{ \"isActive\": false }" }
+          }
+        },
+        { "name": "Activity logs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/admin/logs?page=1&limit=20" } }
+      ]
+    }
+  ]
+}

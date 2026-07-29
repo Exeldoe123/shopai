@@ -1,0 +1,90 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: shopai_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: shopai
+      MYSQL_USER: shopai_user
+      MYSQL_PASSWORD: shopai_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # NOTE : on ne monte PLUS schema.sql/seed.sql (ils ont divergé des modèles Sequelize).
+    # Les tables sont créées par l'app (DB_SYNC=true) et remplies par le service "seed".
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - shopai_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: shopai_backend
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_USER=shopai_user
+      - DB_PASS=shopai_password          # le code lit DB_PASS (pas DB_PASSWORD)
+      - DB_NAME=shopai
+      - DB_SYNC=true                       # crée/maj les tables au démarrage
+      - JWT_SECRET=supersecretkey
+      - JWT_REFRESH_SECRET=superrefreshkey
+      - JWT_EXPIRES_IN=1h
+      - BCRYPT_ROUNDS=10
+      # - OPENAI_API_KEY=sk-...            # optionnel : sinon IA en mode fallback
+    ports:
+      - "3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - shopai_network
+
+  # Service ONE-SHOT pour insérer les données de démo + comptes admin/client.
+  # Lancement : docker compose --profile seed run --rm seed
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: shopai_seed
+    command: ["node", "dist/seed.js"]
+    environment:
+      - DB_HOST=mysql
+      - DB_USER=shopai_user
+      - DB_PASS=shopai_password
+      - DB_NAME=shopai
+      - BCRYPT_ROUNDS=10
+    depends_on:
+      mysql:
+        condition: service_healthy
+    profiles: ["seed"]
+    networks:
+      - shopai_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: shopai_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - shopai_network
+
+networks:
+  shopai_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
